@@ -20,7 +20,7 @@ Load the data from [here](https://raw.githubusercontent.com/jpinero/DMI_2021/mai
 
 ## Perform an EDA on the dataset
 
-## 1. Getting to know the dataset
+# 1. Getting to know the dataset
 
 First, we import the necessary libraries
 
@@ -29,10 +29,10 @@ library(ggplot2)
 library(DataExplorer)
 library(mlbench)
 library(GGally)
-library("tidyverse")
-library("vtable")
-library("SmartEDA")
-library("corrplot")
+library(tidyverse)
+library(vtable)
+library(SmartEDA)
+library(corrplot)
 ```
 
 ## The features on our dataset are the following
@@ -49,7 +49,7 @@ library("corrplot")
 
 6.  fps (Fasting Blood Sugar \> 120 mg/dl): [0 = no, 1 = yes]
 
-7.  restecg (Resting ECG): [0: showing probable or definite left ventricular hypertrophy by Estes\' criteria, 1: normal, 2: having ST-T wave abnormality]
+7.  restecg (Resting ECG): [0: showing probable or definite left ventricular hypertrophy by Estes' criteria, 1: normal, 2: having ST-T wave abnormality]
 
 8.  thalach (maximum heart rate achieved)
 
@@ -65,40 +65,61 @@ library("corrplot")
 
 14. target: [0 = disease, 1 = no disease]
 
+------------------------------------------------------------------------
+
 We import the data, and we name the columns.
 
-```{r}
-heart_data = read.csv("data/heart_disease_dataset.csv", sep=" ")
+We use na.strings="?" to replace all of the missing values in our dataset, indicated with the character "?", with NA.
 
-colnames(heart_data) <- c("Age", "Sex", "ChestPain", "RBP", "Cholesterol", "FastingBloodSugar", "RestingECResults", "MaxHeartRate", "ExInducedAngina", "Oldpeak", "Slope", "NbMajorVessels", "Thalassemia", "Num", "PatetientID")
+```{r}
+heart_data = read.csv("data/heart_disease_dataset.csv", sep=" ", na.strings="?")
+
+colnames(heart_data) <- c("Age", "Sex", "ChestPain", "RBP", "Cholesterol", "FastingBloodSugar", "RestingECResults", "MaxHeartRate", "ExInducedAngina", "Oldpeak", "Slope", "NbMajorVessels", "Thalassemia", "DiagnosisHD", "PatetientID")
 
 # We use dim() to obtain the number of rows and columns on our dataset
 
 dim(heart_data)
 ```
 
-We check the type of the variables
+We indicate which features are categorical variables and which features are continuous variables:
 
 ```{r}
-str(heart_data)
+cont_features = c("Age", "RBP", "Cholesterol", "MaxHeartRate", "Oldpeak")
+cat_features = c("Sex", "ChestPain", "FastingBloodSugar", "RestingECResults", "ExInducedAngina", "Slope", "NbMajorVessels", "Thalassemia", "DiagnosisHD")
 ```
 
-We see that the features "NbMajorVessels" and "Thalassemia" are characters. We have to convert them to numerical types.
+We can change some of the categorical features' values to clarify:
 
 ```{r}
-transform(heart_data, "Thalassemia" = as.numeric("Thalassemia"))
+# We replace the numbers with "male" and "female" for the Sex column
+heart_data["Sex"][heart_data["Sex"] == 1] <- "male"
+heart_data["Sex"][heart_data["Sex"] == 0] <- "female"
 ```
 
-## 2. Data cleaning
+# 2. Data cleaning
+
+First, we check the variable types, and obtain some initial information about the range of our values:
+
+We use the ExpData function from the SmartEDA package: type=2 is for a summary of each individual variable, and the argument fun is where we indicate the information we want. We want the minimum and maximum to know the range of our values, and to check if they range accordingly to the features' definitions.
 
 ```{r}
-ExpData(data=heart_data,type=2, fun = c("mean", "median", "var"))
+ExpData(data=heart_data, type=2, fun = c("min", "max"))
+```
+
+With this information, we can check for missing values.
+
+Our percentage of missing data is very low, so we can go ahead and replace the missing values with the median.
+
+```{r}
+heart_data$NbMajorVessels[is.na(heart_data$NbMajorVessels)] <- median(heart_data$NbMajorVessels, na.rm = TRUE)
+
+heart_data$Thalassemia[is.na(heart_data$Thalassemia)] <- median(heart_data$Thalassemia, na.rm = TRUE)
 ```
 
 ## Create visualizations in order to show which variables seem to be more associated with heart disease
 
 ```{r}
-
+heart_data
 ```
 
 # 2 Difference in mortality rates in hospitalized COVID-19 patients
