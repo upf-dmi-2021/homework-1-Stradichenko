@@ -72,7 +72,7 @@ We import the data, and we name the columns.
 We use na.strings="?" to replace all of the missing values in our dataset, indicated with the character "?", with NA.
 
 ```{r}
-heart_data = read.csv("data/heart_disease_dataset.csv", sep=" ", na.strings="?")
+heart_data <- read.csv("data/heart_disease_dataset.csv", sep=" ", na.strings="?")
 
 colnames(heart_data) <- c("Age", "Sex", "ChestPain", "RBP", "Cholesterol", "FastingBloodSugar", "RestingECResults", "MaxHeartRate", "ExInducedAngina", "Oldpeak", "Slope", "NbMajorVessels", "Thalassemia", "DiagnosisHD", "PatetientID")
 
@@ -84,8 +84,8 @@ dim(heart_data)
 We indicate which features are categorical variables and which features are continuous variables:
 
 ```{r}
-cont_features = c("Age", "RBP", "Cholesterol", "MaxHeartRate", "Oldpeak")
-cat_features = c("Sex", "ChestPain", "FastingBloodSugar", "RestingECResults", "ExInducedAngina", "Slope", "NbMajorVessels", "Thalassemia", "DiagnosisHD")
+cont_features <- c("Age", "RBP", "Cholesterol", "MaxHeartRate", "Oldpeak")
+cat_features <- c("Sex", "ChestPain", "FastingBloodSugar", "RestingECResults", "ExInducedAngina", "Slope", "NbMajorVessels", "Thalassemia", "DiagnosisHD")
 ```
 
 We can change some of the categorical features' values to clarify:
@@ -108,7 +108,7 @@ ExpData(data=heart_data, type=2, fun = c("min", "max"))
 
 With this information, we can check for missing values.
 
-Our percentage of missing data is very low, so we can go ahead and replace the missing values with the median.
+Our percentage of missing data is very low (as shown in the previous table), so we can go ahead and replace the missing values with the median.
 
 ```{r}
 heart_data$NbMajorVessels[is.na(heart_data$NbMajorVessels)] <- median(heart_data$NbMajorVessels, na.rm = TRUE)
@@ -126,10 +126,272 @@ heart_data
 
 Using the supplementary material from the [Difference in mortality rates in hospitalized COVID-19 patients identified by cytokine profile clustering using a machine learning approach: An outcome prediction alternative](https://www.frontiersin.org/articles/10.3389/fmed.2022.987182/full), perform the following tasks
 
-## Reproduce Figure 1 from the publication
+## Libraries
+
+```{r}
+library(readxl)
+```
+
+## We import and format the data
+
+```{r}
+# We import from the Excel files
+covid_table1 <- read_excel("covid-data/Table\ 1.xlsx", na = "NI")
+covid_table2 <- read_excel("covid-data/Table\ 2.xlsx", na = "NI")
+
+# Because there's two header rows, we need to use the first row as the header
+names(covid_table1) <- covid_table1[1,]
+covid_table1 <- covid_table1[-1,]
+
+# The first cell in the first column is a joint cell, meaning the cell 1,1 is now empty
+covid_table2[1,1] <- "ID"
+# Now we can do the same thing we did with Table1
+names(covid_table2) <- covid_table2[1,]
+covid_table2 <- covid_table2[-1,]
+```
+
+Handling incorrectly indicated missing values, empty cells (joint cells).
+
+```{r}
+# The second table has joint cells in the first column. This translates to empty cells in our dataframe. To fix this:
+
+for (i in 1:nrow(covid_table2)){
+  if(is.na(covid_table2[i,1])){
+    covid_table2[i,1] <- last_value
+  } else{
+    last_value <- covid_table2[i,1]
+  }
+}
+
+# Table2 has two types of missing values: NI and ND. NI were replaced by NA when importing the data, but we still have ND values.
+covid_table2 <- replace(covid_table2, covid_table2 == "ND", NA)
+```
+
+### Errors in table 1
+
+Some of the columns have what we can only assume are **mistakes** (in Table 1). Columns that have Yes/No values have in some cells numeric values. We'll fix this in the following manner:
+
+· We know that columns "Admission to ICU", "ARDS Diagnosis", "CRS Diagnosis", "Use of NIV", "Use of AMV", and "Death" have binary Yes or No values. With ExpData, we can check how many distinct values these columns have. If it's more than two, it means there are mistakes that need fixing.
+
+· Column "Gender" also has binary values F and M, so the same principle applies.
+
+```{r}
+ExpData(data=covid_table1, type=2)
+```
+
+After running ExpData, we see that all the binary columns except "Use of AMV" have more than two distinct values. We can fix this as follows:
+
+```{r}
+# For the gender column mistakes, we have no indication of what the correct value is. We replace it with NA.
+covid_table1$Gender[!(covid_table1$Gender %in% c("F", "M"))] <- NA
+# Same for the Death column
+covid_table1$Death[!(covid_table1$Death %in% c("No", "Yes"))] <- NA
+
+# For the "Admission to ICU", "ARDS Diagnosis", "CRS Diagnosis", "Use of NIV" and "Use of AMV", we can use the following rule based on the related "Days with -" value. If the "Days with -" value is 0, then it's a No. If it's >0, it's yes.
+covid_table1$`Admission to ICU`[(!(covid_table1$`Admission to ICU` %in% c("Yes", "No")) & covid_table1$`Days in ICU` == 0)] <- "No"
+covid_table1$`Admission to ICU`[(!(covid_table1$`Admission to ICU` %in% c("Yes", "No")) & covid_table1$`Days in ICU` >= 0)] <- "Yes"
+
+covid_table1$`ARDS Diagnosis`[(!(covid_table1$`ARDS Diagnosis` %in% c("Yes", "No")) & covid_table1$`Days with ARDS` == 0)] <- "No"
+covid_table1$`ARDS Diagnosis`[(!(covid_table1$`ARDS Diagnosis` %in% c("Yes", "No")) & covid_table1$`Days with ARDS` >= 0)] <- "Yes"
+
+covid_table1$`CRS Diagnosis`[(!(covid_table1$`CRS Diagnosis` %in% c("Yes", "No")) & covid_table1$`Days with CRS` == 0)] <- "No"
+covid_table1$`CRS Diagnosis`[(!(covid_table1$`CRS Diagnosis` %in% c("Yes", "No")) & covid_table1$`Days with CRS` >= 0)] <- "Yes"
+
+covid_table1$`Use of NIV`[(!(covid_table1$`Use of NIV` %in% c("Yes", "No")) & covid_table1$`Days with NIV` == 0)] <- "No"
+covid_table1$`Use of NIV`[(!(covid_table1$`Use of NIV` %in% c("Yes", "No")) & covid_table1$`Days with NIV` >= 0)] <- "Yes"
+
+covid_table1$`Use of AMV`[(!(covid_table1$`Use of AMV` %in% c("Yes", "No")) & covid_table1$`Days with AMV` == 0)] <- "No"
+covid_table1$`Use of AMV`[(!(covid_table1$`Use of AMV` %in% c("Yes", "No")) & covid_table1$`Days with AMV` >= 0)] <- "Yes"
+
+```
+
+### Correcting variable types
+
+```{r}
+ExpData(data=covid_table1, type=2)
+ExpData(data=covid_table2, type=2)
+# When checking with the function ExpData, we can see all of our vairable types are Char.
+```
+
+Because the tables are badly formatted in many cases, we have to be careful and check column by column the potential problems we may encounter when converting the type.
+
+We'll get a warning telling us some of the values were coerced to NA because some values in both tables are stored as "text" format an R can't read them as numbers.
+
+· Table 1 (we're ignoring the date columns because they're not useful in this exercise)
+
+```{r}
+# We turn the column BMI to numeric:
+
+covid_table1$BMI <- as.numeric(covid_table1$BMI)
+
+#We turn the columns Age, Days in ICU, Days with ARDS, Days with CRS, Days with NIV, Days with AMV and Days of hospitalization into integers (we use column indexes).
+
+for(i in c(2, 8, 10, 12, 14, 16, 17)){
+  covid_table1[,i] <- sapply(covid_table1[,i], as.integer)
+}
+```
+
+· Table 2: At first glance, all of the columns except Day (which is integer) seem numeric type. If we try to change them all at once, we'll get a warning stating that there were forced NA values, meaning not all the values are numeric. If we inspect the dataset further, we'll see some values indicated as greater than or lesser than ("\>x" or "\<x" in some columns).
+
+We first have to check which columns have these types of characters and then change the rest to numeric.
 
 ```{r}
 
+# The first column, Day, is integer
+covid_table2$Day <- as.integer(covid_table2$Day)
+
+# WE check which columns have > or < characters
+which(apply(covid_table2, 2, function(x) any(grepl("(>|<)", x))))
+```
+
+```{r}
+# The output shows us the columns CRP, Procalcitonin and Ferritin have these characters. We convert the rest of the columns to numeric.
+
+covid_table2[,3:18] <- sapply(covid_table2[,3:18], as.numeric)
+covid_table2[,22:27] <- sapply(covid_table2[,22:27], as.numeric)
+```
+
+### Merging both tables
+
+The next step is to merge both tables. For this, we have to check both the ID columns are correctly written:
+
+Table 1:
+
+```{r}
+# We check if there's any cell in the ID column of the first table that doesn't follow the COAG-HSJD-x pattern.
+covid_table1$ID[!(grepl("^COAG-HSJD.*$", covid_table1$ID))]
+```
+
+The output tells us that there are no cells that differ this pattern.
+
+Table 2:
+
+```{r}
+# We check if there's any cell in the ID column of the first table that doesn't follow the COAG-HSJD-x pattern.
+covid_table2$ID[!(grepl("^COAG-HSJD.*$", covid_table2$ID))]
+```
+
+The output tells us there's 12 cells where the pattern isn't followed. This is most likely due to a mistake (the J and D are switched). We correct these mistakes:
+
+```{r}
+covid_table2$ID[covid_table2$ID == "COAG-HSDJ-202"] <- "COAG-HSJD-202"
+covid_table2$ID[covid_table2$ID == "COAG-HSDJ-203"] <- "COAG-HSJD-203"
+covid_table2$ID[covid_table2$ID == "COAG-HSDJ-206"] <- "COAG-HSJD-206"
+```
+
+Now we have to check for duplicates rows.
+
+Table 1:
+
+```{r}
+covid_table1[duplicated(covid_table1$ID), ]
+```
+
+If we check the duplicated rows we got, we see some are indeed duplicated rows but some are numbering mistakes. This, like before, is most likely due to the fact these were inputed manually and there are human errors.
+
+```{r}
+# Patient with ID COAG-HSJD-197 is duplicated. This isn't a duplicate row but instead, one of these rows should be another patient ( we choose COAG-HSJD-198)
+covid_table1[167,1] <- "COAG-HSJD-198"
+
+# Patient with ID COAG-HSJD-244 is duplicated. This isn't a duplicate row but instead, one of these rows should be another patient (we choose COAG-HSJD-245)
+covid_table1[211,1] <- "COAG-HSJD-245"
+
+# Now we can remove what we're sure are duplicate rows:
+covid_table1 <- covid_table1[!duplicated(covid_table1$ID), ]
+```
+
+Table 2:
+
+```{r}
+covid_table1[duplicated(covid_table1$ID), ]
+```
+
+There are no duplicate rows in table 2.
+
+Now we can safely merge both tables:
+
+```{r}
+covid_data <- merge(covid_table1, covid_table2, by = "ID")
+
+ExpData(data = covid_data, type=2, fun = c("min", "max"))
+length(unique(covid_data$ID))
+```
+
+We now have a table with all of the information, that has 194 distinct patients.
+
+The original paper had 194 patients. Seeing as the data processing process was not described, we can't replicate exactly their process.
+
+We also see the original paper described an age range from 25 to 97, same as here.
+
+## Reproduce Figure 1 from the publication
+
+For some of the plots, we'll have to use Table 1, as there are no duplicates.
+
+First, we have to make sure we only use the patients that we kept in our final dataset
+
+```{r}
+covid_table1_final <- covid_table1[which(unique(covid_data$ID) %in% covid_data$ID), ]
+```
+
+### Figure 1A: Age distribution
+
+```{r}
+hist(covid_table1_final$Age, ylim=c(0,50), main = paste("Age"), xlab = "Age (years)", ylab = "Frequency (n)", col = "azure")
+```
+
+## Figure 1B: Definition of the clinical classification Table
+
+First, we need to make new columns with the clinical classification described in the paper (G1, G2, G3, G4).
+
+```{r}
+covid_table1_final$`Clinical Classification` <- with(covid_table1_final,
+            case_when(
+              covid_table1_final$`Use of NIV` == "No" &
+                covid_table1_final$`Use of AMV` == "No" &
+                  covid_table1_final$`ARDS Diagnosis` == "No" ~ "G1",
+              covid_table1_final$`Use of NIV` == "Yes" &
+                covid_table1_final$`Use of AMV` == "No" &
+                  covid_table1_final$`ARDS Diagnosis` == "Yes" ~ "G3",
+              covid_table1_final$`Use of AMV` == "Yes" &
+                  covid_table1_final$`ARDS Diagnosis` == "Yes" ~ "G4",
+              covid_table1_final$`ARDS Diagnosis` == "No" ~ "G2"
+            ))
+
+```
+
+```{r}
+# Plotting
+par(mfrow=c(2,2))
+
+table_1b_data <- matrix(c('Clinical\nclassification','NIV','AMV','ARDS', 
+                       'G1', '-', '-', '-', 
+                       'G2', '-/+', '+/-', '-', 
+                       'G3', '+', '-', '+', 
+                       'G4', '-/+', '+','+'), 
+                     nrow = 5, ncol = 4)
+colnames(table_1b_data) <- c("", "NIV", "AMV", "ARDS")
+
+plot(c(0, ncol(table_1b_data)+1), c(0, nrow(table_1b_data)+1), type = "n", xlab = "", ylab = "",
+     xaxt = "n", yaxt = "n")
+
+text(x = rep(1:ncol(table_1b_data), nrow(table_1b_data)),
+     y = rep(nrow(table_1b_data):1, each = ncol(table_1b_data)),
+     labels = as.vector(table_1b_data), cex = 1)
+
+p3 <- barplot(table(covid_table1_final$`Clinical Classification`), ylim = c(0,80), 
+        main = "Clinical Classification",
+        xlab = "Clinical Classification",
+        ylab = "Frequency (n)",
+)
+text(x = p3, y = table(covid_table1_final$`Clinical Classification`)+10, label = table(covid_table1_final$`Clinical Classification`))
+```
+
+### Figure 1D: Vital Status
+
+```{r}
+figure_1d <- barplot(table(covid_table1_final$Death), ylim = c(0,160), main = "Vital Status", xlab = "Death", ylab = "Frequency (n)",
+)
+text(x = figure_1d, y = table(covid_table1_final$Death), label = table(covid_table1_final$Death))
 ```
 
 ## Reproduce Figure 2 from the publication
@@ -137,7 +399,8 @@ Using the supplementary material from the [Difference in mortality rates in hosp
 but instead of representing the clusters in the annotation, represent the groups (G1 to G4)
 
 ```{r}
-
+#covid_table1[,2] <- as.numeric(covid_table1[,2])
+#ExpData(data=covid_table1, type=2)
 ```
 
 ## Improve figure 2 of the publication
