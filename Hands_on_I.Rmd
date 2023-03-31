@@ -1,66 +1,738 @@
 ---
-title: "my title"
-author: "my name (dummy@mail.com)"
+title: "Analysis of Heart Disease Dataset"
+author: "Emma Juan Salazar (emma.juan01@estudiant.upf.edu) and Gary etc."
 date: "Last update: `r format(Sys.time(), '%d %B, %Y')`"      
 output:
   html_document:
     toc: true
     fig_caption: true
+  html_notebook: 
+    toc: yes
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+# Analysis of the Heart Disease Dataset
 
-# Analysis of the Heart Disease Dataset 
-Load the data from
-[here](https://raw.githubusercontent.com/jpinero/DMI_2021/main/datasets/heart_disease_dataset.csv), and the description is [here](https://raw.githubusercontent.com/jpinero/DMI_2021/main/datasets/heart_disease_description.txt). 
-The original dataset comes from [here](https://archive.ics.uci.edu/ml/datasets/Heart+Disease) and corresponds to the [processed cleveland data](https://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/processed.cleveland.data)
+Load the data from [here](https://raw.githubusercontent.com/jpinero/DMI_2021/main/datasets/heart_disease_dataset.csv), and the description is [here](https://raw.githubusercontent.com/jpinero/DMI_2021/main/datasets/heart_disease_description.txt). The original dataset comes from [here](https://archive.ics.uci.edu/ml/datasets/Heart+Disease) and corresponds to the [processed cleveland data](https://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/processed.cleveland.data)
 
 ## Perform an EDA on the dataset
 
+### 1. Getting to know the dataset
+
+First, we import the necessary librariest
+
 ```{r}
-
-
-
+library(ggplot2)
+library(DataExplorer)
+library(mlbench)
+library(GGally)
+library(tidyverse)
+library(vtable)
+library(SmartEDA)
+library(corrplot)
+library(dplyr)
+library(corrplot)
 ```
 
+#### The features on our dataset are the following:
 
+1.  age (Age in years)
+
+2.  sex : (1 = male, 0 = female)
+
+3.  cp (Chest Pain Type): [ 1: typical angina, 2: atypical angina, 3: non-anginal pain, 4: asymptomatic]
+
+4.  trestbps (Resting Blood Pressure in mm/hg )
+
+5.  chol (Serum Cholesterol in mg/dl)
+
+6.  fbs (Fasting Blood Sugar \> 120 mg/dl): [1 = yes, 0 = no]
+
+7.  restecg (Resting ECG): [0: normal, 1: having ST-T wave abnormality (T wave inversions and/or ST elevation or depression of \> 0.05 mV), 2: showing probable or definite left ventricular hypertrophy by Estes' criteria]
+
+8.  thalach (maximum heart rate achieved)
+
+9.  exang (Exercise Induced Angina): [1 = yes, 0 = no]
+
+10. oldpeak (ST depression induced by exercise relative to rest)
+
+11. slope (the slope of the peak exercise ST segment): [1: upsloping; 2: flat; 3: downsloping]
+
+12. ca (number of major vessels): [0--3]
+
+13. thal : [3 = normal, 6 = fixed defect, 7 = reversible defect]
+
+14. target: [1 = disease, 0 = no disease]
+
+------------------------------------------------------------------------
+
+We import the data, and we name the columns.
+
+We use na.strings="?" to replace all of the missing values in our dataset, indicated with the character "?", with NA.
+
+```{r}
+heart_data <- read.csv("data/heart_disease_dataset.csv", sep=" ", na.strings="?")
+
+colnames(heart_data) <- c("Age", "Sex", "ChestPain", "RBP", "Cholesterol", "FBS", "ECG", "MaxHR", "ExInducedAngina", "Oldpeak", "Slope", "NbMajorVessels", "Thalassemia", "DiagnosisHD", "ID")
+
+# We use dim() to obtain the number of rows and columns on our dataset
+
+dim(heart_data)
+```
+
+We indicate which features are categorical variables and which features are continuous variables:
+
+```{r}
+cont_features <- c("Age", "RBP", "Cholesterol", "MaxHR", "Oldpeak")
+cat_features <- c("Sex", "ChestPain", "FBS", "ECG", "ExInducedAngina", "Slope", "NbMajorVessels", "Thalassemia", "DiagnosisHD")
+```
+
+### 2. Data cleaning
+
+First, we check the variable types, and obtain some initial information about the range of our values:
+
+We use the ExpData function from the SmartEDA package: type=2 is for a summary of each individual variable, and the argument fun is where we indicate the information we want. We want the minimum and maximum to know the range of our values, and to check if they range accordingly to the features' definitions.
+
+```{r}
+ExpData(data=heart_data, type=2, fun = c("min", "max"))
+```
+
+With this information, we can check for missing values.
+
+Our percentage of missing data is very low (as shown in the previous table), so we can go ahead and replace the missing values with the median.
+
+```{r}
+heart_data$NbMajorVessels[is.na(heart_data$NbMajorVessels)] <- median(heart_data$NbMajorVessels, na.rm = TRUE)
+
+heart_data$Thalassemia[is.na(heart_data$Thalassemia)] <- median(heart_data$Thalassemia, na.rm = TRUE)
+```
+
+Next, we check for duplicate rows.
+
+```{r}
+heart_data[duplicated(heart_data), ]
+```
+
+We can change some of the categorical values to clarify
+
+```{r}
+# Sex column
+heart_data$Sex[heart_data$Sex == 1] <- "male"
+heart_data$Sex[heart_data$Sex == 0] <- "female"
+
+# Chest Pain Type column
+heart_data$ChestPain[heart_data$ChestPain == 1] <- "typical-angina"
+heart_data$ChestPain[heart_data$ChestPain == 2] <- "atypical-angina"
+heart_data$ChestPain[heart_data$ChestPain == 3] <- "non-anginal-pain"
+heart_data$ChestPain[heart_data$ChestPain == 4] <- "asymptomatic"
+
+# Fasting Blood Sugar column
+heart_data$FBS[heart_data$FBS == 1] <- "yes"
+heart_data$FBS[heart_data$FBS == 0] <- "no"
+
+# Resting ECG column
+heart_data$ECG[heart_data$ECG == 0] <- "normal"
+heart_data$ECG[heart_data$ECG == 1] <- "st-wave-abnormality"
+heart_data$ECG[heart_data$ECG == 2] <- "left-ventr-hypertrophy"
+
+# Exercise Induced Angina
+heart_data$ExInducedAngina[heart_data$ExInducedAngina == 1] <- "yes"
+heart_data$ExInducedAngina[heart_data$ExInducedAngina == 0] <- "no"
+
+# Slope of the peak exercise ST segment
+heart_data$Slope[heart_data$Slope == 1] <- "upsloping"
+heart_data$Slope[heart_data$Slope == 2] <- "flat"
+heart_data$Slope[heart_data$Slope == 3] <- "downsloping"
+
+# Thalassemia
+heart_data$Thalassemia[heart_data$Thalassemia == 3] <- "normal"
+heart_data$Thalassemia[heart_data$Thalassemia == 6] <- "fixed-defect"
+heart_data$Thalassemia[heart_data$Thalassemia == 7] <- "reversible-defect"
+
+# Target column
+heart_data$DiagnosisHD[heart_data$DiagnosisHD == 1] <- "disease"
+heart_data$DiagnosisHD[heart_data$DiagnosisHD == 0] <- "no-disease"
+heart_data$DiagnosisHD[heart_data$DiagnosisHD == 2] <- "disease"
+heart_data$DiagnosisHD[heart_data$DiagnosisHD == 3] <- "disease"
+heart_data$DiagnosisHD[heart_data$DiagnosisHD == 4] <- "disease"
+```
 
 ## Create visualizations in order to show which variables seem to be more associated with heart disease
 
 ```{r}
+ExpData(data=heart_data, type=2, fun = c("min", "max"))
+heart_data
 
 ```
 
+First, we create a series of boxplots of the continuous variables
 
+```{r}
+par(mfrow = c(3,2))
+boxplot(heart_data$Age, horizontal = TRUE, main="Age")
+boxplot(heart_data$Cholesterol, horizontal = TRUE, main="Cholesterol")
+boxplot(heart_data$RBP, horizontal = TRUE, main="Resting Blood Pressure")
+boxplot(heart_data$MaxHR, horizontal = TRUE, main="Thalassemia")
+boxplot(heart_data$Oldpeak, horizontal = TRUE, main="Oldpeak")
+```
 
+Seeing as we have multiple outliers, we can remove them as follows
 
-# 2 Difference in mortality rates in hospitalized COVID-19 patients 
+```{r}
+cont_features <- c("Age", "RBP", "Cholesterol", "MaxHR", "Oldpeak")
+
+remove_outliers <- function(x) {
+  qnt <- quantile(x, probs = c(0.25, 0.75))
+  lower_bound <- qnt[1] - 1.5 * IQR(x)
+  upper_bound <- qnt[2] + 1.5 * IQR(x)
+  x[x < lower_bound | x > upper_bound] <- NA
+  x
+}
+
+heart_data_without_outliers <- heart_data %>% 
+  mutate(
+    Cholesterol = remove_outliers(Cholesterol),
+    RBP = remove_outliers(RBP),
+    MaxHR = remove_outliers(MaxHR),
+    Oldpeak = remove_outliers(Oldpeak)
+    )
+```
+
+And now we can do the box plots again without outliers
+
+```{r}
+heart_data <- heart_data_without_outliers
+
+par(mfrow = c(3,2))
+boxplot(heart_data$Age, horizontal = TRUE, main="Age")
+boxplot(heart_data$Cholesterol, horizontal = TRUE, main="Cholesterol")
+boxplot(heart_data$RBP, horizontal = TRUE, main="Resting Blood Pressure")
+boxplot(heart_data$MaxHR, horizontal = TRUE, main="Maximum Heart Rate")
+boxplot(heart_data$Oldpeak, horizontal = TRUE, main="Oldpeak")
+```
+
+We can also create histograms for each of the continuous variables
+
+```{r}
+hist(heart_data$Age, main="Age", xlab="Age", ylab="Frequency")
+```
+
+```{r}
+hist(heart_data$Cholesterol, main="Cholesterol", xlab="Cholesterol", ylab="Frequency")
+```
+
+```{r}
+hist(heart_data$RBP, main="Resting Blood Pressure", xlab="RBP", ylab="Frequency")
+```
+
+```{r}
+hist(heart_data$MaxHR, main="Maximum Heart Rate", xlab="Maximum Heart Rate", ylab="Frequency")
+```
+
+```{r}
+hist(heart_data$Oldpeak, main="Oldpeak", xlab="Oldpeak", ylab="Frequency")
+```
+
+Then we can plot the rest of the variables as follows:
+
+Diseased vs. Not diseased
+
+```{r}
+
+ggplot(heart_data, aes(factor(Sex))) + 
+  geom_bar(position = "dodge") + 
+  ggtitle("Sex") + 
+  xlab("Sex") + 
+  ylab("Count") + 
+  scale_fill_discrete(name = "ca",)
+
+ggplot(heart_data, aes(factor(ChestPain))) + 
+  geom_bar(position = "dodge") + 
+  ggtitle("ChestPain") + 
+  xlab("ChestPain") + 
+  ylab("Count") + 
+  scale_fill_discrete(name = "ca",)
+
+ggplot(heart_data, aes(factor(FBS))) + 
+  geom_bar(position = "dodge") + 
+  ggtitle("FBS") + 
+  xlab("FBS") + 
+  ylab("Count") + 
+  scale_fill_discrete(name = "ca",)
+
+ggplot(heart_data, aes(factor(ECG))) + 
+  geom_bar(position = "dodge") + 
+  ggtitle("ECG") + 
+  xlab("ECG") + 
+  ylab("Count") + 
+  scale_fill_discrete(name = "ca",)
+
+ggplot(heart_data, aes(factor(ExInducedAngina))) + 
+  geom_bar(position = "dodge") + 
+  ggtitle("ExInducedAngina") + 
+  xlab("ExInducedAngina") + 
+  ylab("Count") + 
+  scale_fill_discrete(name = "ca",)
+
+ggplot(heart_data, aes(factor(Slope))) + 
+  geom_bar(position = "dodge") + 
+  ggtitle("Slope") + 
+  xlab("Slope") + 
+  ylab("Count") + 
+  scale_fill_discrete(name = "ca",)
+
+ggplot(heart_data, aes(factor(NbMajorVessels))) + 
+  geom_bar(position = "dodge") + 
+  ggtitle("NbMajorVessels") + 
+  xlab("NbMajorVessels") + 
+  ylab("Count") + 
+  scale_fill_discrete(name = "ca",)
+
+ggplot(heart_data, aes(factor(Thalassemia))) + 
+  geom_bar(position = "dodge") + 
+  ggtitle("Thalassemia") + 
+  xlab("Thalassemia") + 
+  ylab("Count") + 
+  scale_fill_discrete(name = "ca",)
+```
+
+And finally, we can plot our target variable
+
+```{r}
+ggplot(heart_data, aes(factor(DiagnosisHD))) + 
+  geom_bar(position = "dodge") + 
+  ggtitle("Diagnosis") + 
+  xlab("Diagnosis") + 
+  ylab("Count") + 
+  scale_fill_discrete(name = "ca",)
+```
+
+And we can plot it depending on different other variables:
+
+```{r}
+
+cat_features <- c("Sex", "ChestPain", "FBS", "ECG", "ExInducedAngina", "Slope", "NbMajorVessels", "Thalassemia", "DiagnosisHD")
+
+ggplot(heart_data, aes(factor(Sex), fill = DiagnosisHD)) + 
+  geom_bar(position = "dodge") + 
+  ggtitle("Diagnosis by Sex") + 
+  xlab("Sex") + 
+  ylab("Count") + 
+  scale_fill_discrete(name = "Diagnosis",)
+
+ggplot(heart_data, aes(factor(ChestPain), fill = DiagnosisHD)) + 
+  geom_bar(position = "dodge") + 
+  ggtitle("Diagnosis by Chest Pain") + 
+  xlab("ChestPain") + 
+  ylab("Count") + 
+  scale_fill_discrete(name = "Diagnosis",)
+
+ggplot(heart_data, aes(factor(FBS), fill = DiagnosisHD)) + 
+  geom_bar(position = "dodge") + 
+  ggtitle("Diagnosis by Fasting Blood Sugar") + 
+  xlab("FBS") + 
+  ylab("Count") + 
+  scale_fill_discrete(name = "Diagnosis",)
+
+ggplot(heart_data, aes(factor(ECG), fill = DiagnosisHD)) + 
+  geom_bar(position = "dodge") + 
+  ggtitle("Diagnosis by ECG") + 
+  xlab("ECG") + 
+  ylab("Count") + 
+  scale_fill_discrete(name = "Diagnosis",)
+
+ggplot(heart_data, aes(factor(ExInducedAngina), fill = DiagnosisHD)) + 
+  geom_bar(position = "dodge") + 
+  ggtitle("Diagnosis by Exercised Induced Angina") + 
+  xlab("EXANG") + 
+  ylab("Count") + 
+  scale_fill_discrete(name = "Diagnosis",)
+
+ggplot(heart_data, aes(factor(Slope), fill = DiagnosisHD)) + 
+  geom_bar(position = "dodge") + 
+  ggtitle("Diagnosis by Slope") + 
+  xlab("Slope") + 
+  ylab("Count") + 
+  scale_fill_discrete(name = "Diagnosis",)
+
+ggplot(heart_data, aes(factor(NbMajorVessels), fill = DiagnosisHD)) + 
+  geom_bar(position = "dodge") + 
+  ggtitle("Diagnosis by NbMajorVessels") + 
+  xlab("NbMajorVessels") + 
+  ylab("Count") + 
+  scale_fill_discrete(name = "Diagnosis",)
+
+ggplot(heart_data, aes(factor(Thalassemia), fill = DiagnosisHD)) + 
+  geom_bar(position = "dodge") + 
+  ggtitle("Diagnosis by Thalassemia") + 
+  xlab("Thalassemia") + 
+  ylab("Count") + 
+  scale_fill_discrete(name = "Diagnosis",)
+```
+
+# 2 Difference in mortality rates in hospitalized COVID-19 patients
+
 Using the supplementary material from the [Difference in mortality rates in hospitalized COVID-19 patients identified by cytokine profile clustering using a machine learning approach: An outcome prediction alternative](https://www.frontiersin.org/articles/10.3389/fmed.2022.987182/full), perform the following tasks
+
+## Libraries
+
+```{r}
+library(readxl)
+library(gridExtra)
+library(ComplexHeatmap)
+```
+
+## We import and format the data
+
+```{r}
+# We import from the Excel files
+covid_table1 <- read_excel("covid-data/Table\ 1.xlsx", na = "NI")
+covid_table2 <- read_excel("covid-data/Table\ 2.xlsx", na = "NI")
+
+# Because there's two header rows, we need to use the first row as the header
+names(covid_table1) <- covid_table1[1,]
+covid_table1 <- covid_table1[-1,]
+
+# The first cell in the first column is a joint cell, meaning the cell 1,1 is now empty
+covid_table2[1,1] <- "ID"
+# Now we can do the same thing we did with Table1
+names(covid_table2) <- covid_table2[1,]
+covid_table2 <- covid_table2[-1,]
+```
+
+Handling incorrectly indicated missing values, empty cells (joint cells).
+
+```{r}
+# The second table has joint cells in the first column. This translates to empty cells in our dataframe. To fix this:
+
+for (i in 1:nrow(covid_table2)){
+  if(is.na(covid_table2[i,1])){
+    covid_table2[i,1] <- last_value
+  } else{
+    last_value <- covid_table2[i,1]
+  }
+}
+
+# Table2 has two types of missing values: NI and ND. NI were replaced by NA when importing the data, but we still have ND values.
+covid_table2 <- replace(covid_table2, covid_table2 == "ND", NA)
+```
+
+### Errors in table 1
+
+Some of the columns have what we can only assume are **mistakes** (in Table 1). Columns that have Yes/No values have in some cells numeric values. We'll fix this in the following manner:
+
+· We know that columns "Admission to ICU", "ARDS Diagnosis", "CRS Diagnosis", "Use of NIV", "Use of AMV", and "Death" have binary Yes or No values. With ExpData, we can check how many distinct values these columns have. If it's more than two, it means there are mistakes that need fixing.
+
+· Column "Gender" also has binary values F and M, so the same principle applies.
+
+```{r}
+ExpData(data=covid_table1, type=2)
+```
+
+After running ExpData, we see that all the binary columns except "Use of AMV" have more than two distinct values. We can fix this as follows:
+
+```{r}
+# For the gender column mistakes, we have no indication of what the correct value is. We replace it with NA.
+covid_table1$Gender[!(covid_table1$Gender %in% c("F", "M"))] <- NA
+# Same for the Death column
+covid_table1$Death[!(covid_table1$Death %in% c("No", "Yes"))] <- NA
+
+# For the "Admission to ICU", "ARDS Diagnosis", "CRS Diagnosis", "Use of NIV" and "Use of AMV", we can use the following rule based on the related "Days with -" value. If the "Days with -" value is 0, then it's a No. If it's >0, it's yes.
+covid_table1$`Admission to ICU`[(!(covid_table1$`Admission to ICU` %in% c("Yes", "No")) & covid_table1$`Days in ICU` == 0)] <- "No"
+covid_table1$`Admission to ICU`[(!(covid_table1$`Admission to ICU` %in% c("Yes", "No")) & covid_table1$`Days in ICU` >= 0)] <- "Yes"
+
+covid_table1$`ARDS Diagnosis`[(!(covid_table1$`ARDS Diagnosis` %in% c("Yes", "No")) & covid_table1$`Days with ARDS` == 0)] <- "No"
+covid_table1$`ARDS Diagnosis`[(!(covid_table1$`ARDS Diagnosis` %in% c("Yes", "No")) & covid_table1$`Days with ARDS` >= 0)] <- "Yes"
+
+covid_table1$`CRS Diagnosis`[(!(covid_table1$`CRS Diagnosis` %in% c("Yes", "No")) & covid_table1$`Days with CRS` == 0)] <- "No"
+covid_table1$`CRS Diagnosis`[(!(covid_table1$`CRS Diagnosis` %in% c("Yes", "No")) & covid_table1$`Days with CRS` >= 0)] <- "Yes"
+
+covid_table1$`Use of NIV`[(!(covid_table1$`Use of NIV` %in% c("Yes", "No")) & covid_table1$`Days with NIV` == 0)] <- "No"
+covid_table1$`Use of NIV`[(!(covid_table1$`Use of NIV` %in% c("Yes", "No")) & covid_table1$`Days with NIV` >= 0)] <- "Yes"
+
+covid_table1$`Use of AMV`[(!(covid_table1$`Use of AMV` %in% c("Yes", "No")) & covid_table1$`Days with AMV` == 0)] <- "No"
+covid_table1$`Use of AMV`[(!(covid_table1$`Use of AMV` %in% c("Yes", "No")) & covid_table1$`Days with AMV` >= 0)] <- "Yes"
+
+```
+
+### Correcting variable types
+
+```{r}
+ExpData(data=covid_table1, type=2)
+ExpData(data=covid_table2, type=2)
+# When checking with the function ExpData, we can see all of our vairable types are Char.
+```
+
+Because the tables are badly formatted in many cases, we have to be careful and check column by column the potential problems we may encounter when converting the type.
+
+We'll get a warning telling us some of the values were coerced to NA because some values in both tables are stored as "text" format an R can't read them as numbers.
+
+· Table 1 (we're ignoring the date columns because they're not useful in this exercise)
+
+```{r}
+# We turn the column BMI to numeric:
+
+covid_table1$BMI <- as.numeric(covid_table1$BMI)
+
+#We turn the columns Age, Days in ICU, Days with ARDS, Days with CRS, Days with NIV, Days with AMV and Days of hospitalization into integers (we use column indexes).
+
+for(i in c(2, 8, 10, 12, 14, 16, 17)){
+  covid_table1[,i] <- sapply(covid_table1[,i], as.integer)
+}
+```
+
+· Table 2: At first glance, all of the columns except Day (which is integer) seem numeric type. If we try to change them all at once, we'll get a warning stating that there were forced NA values, meaning not all the values are numeric. If we inspect the dataset further, we'll see some values indicated as greater than or lesser than ("\>x" or "\<x" in some columns).
+
+We first have to check which columns have these types of characters and then change the rest to numeric.
+
+```{r}
+
+# The first column, Day, is integer
+covid_table2$Day <- as.integer(covid_table2$Day)
+
+# WE check which columns have > or < characters
+which(apply(covid_table2, 2, function(x) any(grepl("(>|<)", x))))
+```
+
+```{r}
+# The output shows us the columns CRP, Procalcitonin and Ferritin have these characters. We convert the rest of the columns to numeric.
+
+covid_table2[,3:18] <- sapply(covid_table2[,3:18], as.numeric)
+covid_table2[,22:27] <- sapply(covid_table2[,22:27], as.numeric)
+```
+
+### Merging both tables
+
+The next step is to merge both tables. For this, we have to check both the ID columns are correctly written:
+
+Table 1:
+
+```{r}
+# We check if there's any cell in the ID column of the first table that doesn't follow the COAG-HSJD-x pattern.
+covid_table1$ID[!(grepl("^COAG-HSJD.*$", covid_table1$ID))]
+```
+
+The output tells us that there are no cells that differ this pattern.
+
+Table 2:
+
+```{r}
+# We check if there's any cell in the ID column of the first table that doesn't follow the COAG-HSJD-x pattern.
+covid_table2$ID[!(grepl("^COAG-HSJD.*$", covid_table2$ID))]
+```
+
+The output tells us there's 12 cells where the pattern isn't followed. This is most likely due to a mistake (the J and D are switched). We correct these mistakes:
+
+```{r}
+covid_table2$ID[covid_table2$ID == "COAG-HSDJ-202"] <- "COAG-HSJD-202"
+covid_table2$ID[covid_table2$ID == "COAG-HSDJ-203"] <- "COAG-HSJD-203"
+covid_table2$ID[covid_table2$ID == "COAG-HSDJ-206"] <- "COAG-HSJD-206"
+```
+
+Now we have to check for duplicates rows.
+
+Table 1:
+
+```{r}
+covid_table1[duplicated(covid_table1$ID), ]
+```
+
+If we check the duplicated rows we got, we see some are indeed duplicated rows but some are numbering mistakes. This, like before, is most likely due to the fact these were inputed manually and there are human errors.
+
+```{r}
+# Patient with ID COAG-HSJD-197 is duplicated. This isn't a duplicate row but instead, one of these rows should be another patient ( we choose COAG-HSJD-198)
+covid_table1[167,1] <- "COAG-HSJD-198"
+
+# Patient with ID COAG-HSJD-244 is duplicated. This isn't a duplicate row but instead, one of these rows should be another patient (we choose COAG-HSJD-245)
+covid_table1[211,1] <- "COAG-HSJD-245"
+
+# Now we can remove what we're sure are duplicate rows:
+covid_table1 <- covid_table1[!duplicated(covid_table1$ID), ]
+```
+
+Table 2:
+
+```{r}
+covid_table1[duplicated(covid_table1$ID), ]
+```
+
+There are no duplicate rows in table 2.
+
+Now we can safely merge both tables:
+
+```{r}
+covid_data <- merge(covid_table1, covid_table2, by = "ID")
+
+ExpData(data = covid_data, type=2, fun = c("min", "max"))
+length(unique(covid_data$ID))
+```
+
+We now have a table with all of the information, that has 193 distinct patients.
+
+The original paper had 194 patients. Seeing as the data processing process was not described, we can't replicate exactly their process.
+
+We also see the original paper described an age range from 25 to 97, same as here.
 
 ## Reproduce Figure 1 from the publication
 
-```{r}
+For some of the plots, we'll have to use Table 1. In the merged table, we have patients appearing in multiple rows because Table 2 had more than one row per patient. We use Table 1 because we only need the information in table 1 and we need it not to be duplicated.
 
+First, we have to make sure we only use the 193 patients that we kept in our final dataset.
+
+```{r}
+covid_table1 <- covid_table1[which(covid_table1$ID %in% covid_data$ID), ]
 ```
 
+### Figure 1A: Age distribution
 
-## Reproduce Figure 2 from the publication
-but instead of representing the clusters in the annotation, represent the groups (G1 to G4)
+```{r, fig.show="hide"}
+figure_1a <- hist(covid_table1$Age,
+                  ylim=c(0,50),
+                  main = paste("Age"),
+                  xlab = "Age (years)",
+                  ylab = "Frequency (n)",
+                  col = "#e0eeee")
+```
+
+## Figure 1B: Definition of the clinical classification Table
+
+First, we need to make new columns with the clinical classification described in the paper (G1, G2, G3, G4).
 
 ```{r}
+covid_table1$`Clinical Classification` <- with(covid_table1,
+            case_when(
+              covid_table1$`Use of NIV` == "No" &
+                covid_table1$`Use of AMV` == "No" &
+                  covid_table1$`ARDS Diagnosis` == "No" ~ "G1",
+              covid_table1$`Use of NIV` == "Yes" &
+                covid_table1$`Use of AMV` == "No" &
+                  covid_table1$`ARDS Diagnosis` == "Yes" ~ "G3",
+              covid_table1$`Use of AMV` == "Yes" &
+                  covid_table1$`ARDS Diagnosis` == "Yes" ~ "G4",
+              covid_table1$`ARDS Diagnosis` == "No" ~ "G2"
+            ))
+```
 
+We plot the table:
+
+```{r}
+# We createa dataframe with the information on the table.
+class_def <- data.frame("Clinical classification"=c("G1", "G2", "G3", "G4"),
+                           "NIV" = c("-", "-/+", "+", "-/+"),
+                           "AMV" = c("-", "+/-", "-", "+"),
+                           "ARDS" = c("-", "-", "+", "+"))
+
+figure_1b <- tableGrob(class_def)
+
+grid.arrange(top = "Definition of the clinical classification", figure_1b)
+```
+
+### Figure 1C: Clinical classification
+
+```{r}
+figure_1c <- barplot(table(covid_table1$`Clinical Classification`),
+                     ylim = c(0,80),
+                     main = "Clinical classification",
+                     xlab = "Clinical classification",
+                     ylab = "Frequency (n)",
+                     col = c("#8dd3c8", "#feffb3", "#bebbda", "#fb8071"))
+
+text(x = figure_1c,
+     y = table(covid_table1$`Clinical Classification`) + 5,
+     label = table(covid_table1$`Clinical Classification`))
+```
+
+We don't get the exact same values. This must be due to the fact we don't have exactly the same selected rows as the original paper, plus maybe an error was made.
+
+### Figure 1D: Vital Status
+
+```{r}
+figure_1d <- barplot(table(covid_table1$Death),
+                     ylim = c(0,160),
+                     main = "Vital status",
+                     xlab = "Death",
+                     ylab = "Frequency (n)",
+                     col = c("#8dd3c8", "#feffb3"))
+
+text(x = figure_1d,
+     y = table(covid_table1$Death) + 10,
+     label = table(covid_table1$Death))
+```
+
+## Reproduce Figure 2 from the publication
+
+but instead of representing the clusters in the annotation, represent the groups (G1 to G4)
+
+#### Data pre-processing
+
+First, we need to redo the merged table to include the clinical classification column.
+
+```{r}
+covid_data <- merge(covid_table1, covid_table2, by = "ID")
+```
+
+We create a data frame where we group by ID and Clinical classification, and obtain the mean of each needed numeric variables.
+
+```{r}
+heatmap_data <- covid_data %>% group_by(ID, `Clinical Classification`) %>% summarise_at(vars("IL-6","CXCL10", "IL-38", "IL-8", "IFN-ɑ", "IL-10", "TNF-ɑ", "CCL2", "CCL3", "IFN-γ", "IL-1β", "G-CSF"), mean, na.rm = TRUE)
+
+# We convert the resulting grouping into a dataframe
+heatmap_data <- as.data.frame(heatmap_data)
+
+# We sort by Clinical classification so the grouping will make sense
+# heatmap_data <- heatmap_data[order(heatmap_data$`Clinical Classification`),]
+
+# We define the row names by the patient IDs
+rownames(heatmap_data) <- heatmap_data$ID
+
+# We create a new dataframe where we'll erase the ID and Clinical classification columns.
+heatmap_matrix <- heatmap_data[,-1:-2]
+
+# We convert this dataframe to a matrix
+heatmap_matrix <- as.matrix(heatmap_matrix)
+
+# We transpose the matrix
+heatmap_matrix <- t(heatmap_matrix)
+
+# We define the heatmap annotation (to show the Clinical Classification groupings)
+annotations = HeatmapAnnotation(df = heatmap_data[,2:2])
+annotations
+```
+
+#### Plotting the heatmap
+
+Now we can plot the heatmap from the matrix.
+
+```{r}
+# We define the heatmap annotation (to show the Clinical Classification groupings)
+
+# We build the heatmap
+heatmap(heatmap_matrix,
+        scale = "column",
+        xlab = "Patients",
+        labCol = FALSE)
+
+# And we add the legend
+legend(x="bottomleft",
+       legend=c("0.00", "50%", "100%"),
+       title = "Relative expression",
+       fill = c("#fff5eb", "#fd9c57", "#8c2d05"),
+       cex = 0.8)
 ```
 
 ## Improve figure 2 of the publication
+
 Add a second annotation with information of deathm and a third one with information of gender
 
 ```{r}
-
+data <- as.matrix(mtcars)
+heatmap(data)
+mtcars
+data
 ```
-
 
 # session info {.unnumbered}
 
