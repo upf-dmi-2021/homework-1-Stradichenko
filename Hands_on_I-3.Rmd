@@ -1,0 +1,576 @@
+---
+title: "my title"
+author: "my name (dummy@mail.com)"
+date: "Last update: `r format(Sys.time(), '%d %B, %Y')`"      
+output:
+  html_document:
+    toc: true
+    fig_caption: true
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Analysis of the Heart Disease Dataset
+
+Load the data from
+[here](https://raw.githubusercontent.com/jpinero/DMI_2021/main/datasets/heart_disease_dataset.csv),
+and the description is
+[here](https://raw.githubusercontent.com/jpinero/DMI_2021/main/datasets/heart_disease_description.txt).
+The original dataset comes from
+[here](https://archive.ics.uci.edu/ml/datasets/Heart+Disease) and
+corresponds to the [processed cleveland
+data](https://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/processed.cleveland.data)
+
+## Perform an EDA on the dataset
+
+```{r}
+```
+
+```{r}
+
+library("tidyverse")
+library("vtable")
+library("SmartEDA")
+library("ggplot2")
+library("corrplot")
+
+### 1.Import the data
+df <- read.csv("/Users/emmajuansalazar/homework-1-Stradichenko/data/heart_disease_dataset.csv", sep = " ", header = TRUE)
+
+### 
+which.nonnum <- function(x) {
+  which(is.na(suppressWarnings(as.numeric(as.character(x)))))
+}
+
+non_numeric <- lapply(df, which.nonnum)
+df <- df[-c(non_numeric$ca, non_numeric$thal),]
+non_numeric <- lapply(df, which.nonnum)
+
+### 2. Data cleaning 
+## 2.1 Check the typf of variables 
+vtable(df)
+labels <- c("Age", "Sex", "Chest Pain", "Resting Blood Pressure", "Serum Cholestoral mg/dl", "Fasting blood sugar", "Resting electrocardiographic", "maximum heart rate achieved", "exercise induced angina", "ST depression induced by exercise relative to rest", "slope of the peak exercise ST segment", "number of major vessels", "3=normal, 6=fixed defect, 7=reversable defect", "Diagnosis of hearth disease", "ID")
+vtable(df, labels = labels, factor.limit = 3)
+
+
+```
+
+```{r}
+
+## check for sample size and their values  
+ExpData(data = df, type = 1)
+#Summary of all the variables
+ExpData(data=df,type=2, fun = c("mean", "median", "var"))
+#Summary of the continuos variables 
+ExpData(data=df[,c(4,5,8,10,1)],type=2, fun = c("mean", "median", "var"))
+summary(df[,c(4,5,8,10,1)])
+
+
+```
+
+We saw no missing values, the total count of the sample coincides
+between variables. categorical variables: sex, cp, fbs, restecg, exang,
+slope, ca, thal, num continuos variables: age, trestbps, chol, thalach,
+oldpeak
+
+```{r}
+## search for duplicates rows 
+unique(df$ID)
+
+## cleaning the data: remove the outliers, regarding to the interquanrtile range 
+# Load data
+# Calculate first and third quartiles (Q1 and Q3)
+q1 <- quantile(df$chol, 0.25)
+q3 <- quantile(df$chol, 0.75)
+# Calculate IQR
+iqr <- q3 - q1
+# Identify outliers
+outliers <- df$chol[df$chol < (q1 - 1.5 * iqr) | df$chol > (q3 + 1.5 * iqr)]
+# Remove outliers
+data_without_outliers <- df$chol[!df$chol %in% outliers]
+
+```
+
+```{r}
+## cleaning the data: remove the outliers, regarding to the interquanrtile range 
+library(dplyr)
+remove_outliers <- function(x) {
+  qnt <- quantile(x, probs = c(0.25, 0.75))
+  lower_bound <- qnt[1] - 1.5 * IQR(x)
+  upper_bound <- qnt[2] + 1.5 * IQR(x)
+  x[x < lower_bound | x > upper_bound] <- NA
+  x
+}
+
+#boxplot of continuos variables
+par(mfrow = c(2,2))
+boxplot(df$chol, horizontal = TRUE, main="Chol")
+boxplot(df$trestbps, horizontal = TRUE, main="trestbps")
+boxplot(df$thalach, horizontal = TRUE, main="thalach")
+boxplot(df$oldpeak, horizontal = TRUE, main="Oldpeak")
+
+```
+
+There are boxplot from the variables chol, trestbps and thalach
+
+```{r}
+
+# Remove outliers from the "y" column of the data frame
+df_no_outliers <- df %>%
+  mutate(chol = remove_outliers(chol), trestbps = remove_outliers(trestbps),
+         thalach = remove_outliers(thalach), oldpeak = remove_outliers(oldpeak))
+
+par(mfrow = c(2,2))
+boxplot(df_no_outliers$chol, horizontal = TRUE, main="Chol")
+boxplot(df_no_outliers$trestbps, horizontal = TRUE, main="trestbps")
+boxplot(df_no_outliers$thalach, horizontal = TRUE, main="thalach")
+boxplot(df_no_outliers$oldpeak, horizontal = TRUE, main="Oldpeak")
+df <- df_no_outliers
+
+```
+
+After taking out the outliers we do not see values out the first and
+fourth quartile
+
+```{r}
+### histogram of the age variable 
+attach(mtcars)
+hist(df$age, breaks = 40, main="Age", xlab="Age", ylab="Frequency")
+
+
+```
+
+Age distribution
+
+```{r}
+# Create a histogram of thalach
+ggplot(df, aes(x = thalach)) + 
+  geom_histogram(binwidth = 5, fill = "lightblue", color = "black") + 
+  ggtitle("maximum heart rate achieved") + 
+  xlab("heart rate achieved") + 
+  ylab("Frequency")
+
+```
+
+Histogram of the maximun heart rrate achived. the most part of the
+patients have between a range of 140 to 180, the maximun pic is 160.
+
+```{r}
+### comparing 2 different categorical variables 
+par(mfrow = c(2,1))
+# exercise induced angina (yes or no, 0 or 1) in ca (major vessels)
+ggplot(df, aes(factor(exang), fill = ca)) + 
+  geom_bar(position = "dodge") + 
+  ggtitle("induced angina in ca") + 
+  xlab("exang") + 
+  ylab("Count") + 
+  scale_fill_discrete(name = "ca",)
+
+# Chest pain Gender wise
+ggplot(df, aes(factor(cp), fill = factor(sex))) + 
+  geom_bar(position = "dodge") + 
+  ggtitle("Chest pain gender wise") + 
+  xlab("chest pain") + 
+  ylab("Count") + 
+  scale_fill_discrete(name = "sex",)
+  
+```
+
+sex 1:male 0:female. From exercise induced angina, the patients that do
+not have the majority have 0 major vessels. in average, by sex, both
+have a incresing number patient in the cheat pain level.
+
+```{r}
+### comparing 1 categorical variables with continuos 
+par(mfrow = c(2,2))
+boxplot(oldpeak ~ slope, data = df)
+boxplot(oldpeak ~ cp, data = df)
+boxplot(oldpeak ~ fbs, data = df)
+boxplot(oldpeak ~ restecg, data = df)
+
+
+
+```
+
+slope -- Value 1: upsloping -- Value 2: flat -- Value 3: downsloping
+Analysing the variable oldpeak, ST depression induced by exercise
+relative to rest, there are not notable differences with the presence of
+fating blood sugar, but regarding to the slopre of the peak exercise ST
+segment, higer value of old peak induce a downsloping slope.
+
+```{r}
+## violin plots 
+ggplot(df, aes(x=factor(restecg), y=oldpeak, fill=factor(restecg))) + geom_violin()
+
+ggplot(df) + aes(x = slope, y = oldpeak, color = slope) +
+  geom_jitter() + theme(legend.position = "none")
+ggplot(df, aes(x=factor(slope), y=oldpeak, fill=factor(slope))) + geom_violin()
+```
+
+In this violin plot we can see a different representation of the
+variable oldpeak respect to the slope, because these factors have an
+intrinsec relationship.
+
+```{r}
+## comparing 2 categorical variables with 1 continuos 
+# ST depression induced by exercise relative to rest,with the slope of the peak exercise ST segment by sex 
+df %>% 
+  ggplot(aes(x=factor(sex), y=oldpeak))+
+  geom_boxplot()+
+  facet_grid(~slope)+
+  labs(title = "sex in oldpeak")+
+  xlab("slope")
+  
+```
+
+By analysing the variable oldpeak with slope and sex, we can not see big
+diffrences in the 2 first levels of slope and for the third there are
+major part of women.
+
+```{r}
+## comparing 2 categorical variables with 1 continuos 
+# diagnosis in heart diseases with thalach level by sex 
+df %>% 
+  ggplot(aes(x=factor(sex), y=thalach))+
+  geom_boxplot()+
+  facet_grid(~num)+
+  labs(title = "level of thalach vs heart disease")+
+  xlab("level of the heart disease") 
+  
+```
+
+Looking at the level of maximum heart rate achieved in the dignosis of
+hearth diseases, we can see a decresing rate by an incresing level of
+heart diseases.
+
+```{r}
+## comparing 2 categorical variables with 1 continuos 
+# diagnosis in heart diseases with thalach level by sex 
+df %>% 
+  ggplot(aes(x=factor(cp), y=chol))+
+  geom_boxplot()+
+  facet_grid(~exang)+
+  labs(title = "level of cholesterol vs chest pain and exang")+
+  xlab("chest pain") 
+  
+```
+
+By analysing presence of the exercise induced angina, different levels
+of chest pain seems not to be correlated, but in serum cholestoral,
+there are not much variation when the patient have angina, the level
+gets more stabilized, but increases having major level of cheat pain.
+
+```{r}
+## lineal regression between two continuos variables 
+#Create the linear regression
+ggplot(df, aes(x=trestbps, y=age))+
+  geom_point()+
+  geom_smooth(method="lm", col="black")
+
+```
+
+Comparing two continuos variables, the age have a correlation with the
+resting blood sugar pressure, by getting older, the pressure increases.
+
+## Create visualizations in order to show which variables seem to be more associated with heart disease
+
+```{r}
+library(corrplot)
+
+# Calculate the correlation matrix
+df$ca <- as.numeric(df$ca)
+df$thal <- as.numeric(df$thal)
+corr_matrix <- cor(df,method = "pearson", use = "complete.obs")
+
+## plot the matrix 
+corrplot(corr_matrix,
+  method = "number",
+  type = "upper" ,     # show only upper side
+  addCoef.col = 1,    # Change font size of correlation coefficients
+  number.cex = 0.5
+)
+```
+
+From the correlation matrix look for the variables that correlates more
+with diagnosis of heart diseases, the most significant are oldpeak, ca
+and thal, with values of 0.46, 0.49 and 0.51, respectively.
+
+```{r}
+
+# Plot the heatmap
+library("MASS")
+library("reshape")
+library("reshape2")
+
+ggplot(melt(corr_matrix), aes(x = Var1, y = Var2, fill = value)) + 
+   geom_tile(color = "white") + 
+   scale_fill_gradient(low = "white", high = "darkblue", limits = c(-1,1), name = "Correlation") +
+   ggtitle("Correlation Between Variables") + 
+   xlab("") + ylab("") + 
+   theme(plot.title = element_text(hjust = 0.5, size = 18),
+         axis.text = element_text(size = 8),
+         axis.title = element_text(size = 10),
+         axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 8),
+         legend.title = element_text(size = 10),
+         legend.text = element_text(size = 10)) + 
+   coord_equal() +
+   theme(legend.position = "top")
+
+```
+
+# 2 Difference in mortality rates in hospitalized COVID-19 patients
+
+Using the supplementary material from the [Difference in mortality rates
+in hospitalized COVID-19 patients identified by cytokine profile
+clustering using a machine learning approach: An outcome prediction
+alternative](https://www.frontiersin.org/articles/10.3389/fmed.2022.987182/full),
+perform the following tasks
+
+## Reproduce Figure 1 from the publication
+
+```{r}
+library("readxl")
+# library(gridExtra)
+# library(grid)
+library(ggplot2)
+library(dplyr)
+# library(cowplot)
+# library(gtable)
+library("ggplotify")
+library("scales")
+# library(gplots)
+library(RColorBrewer)
+
+df1 <- read_excel("covid-data/Table\ 1.xlsx")
+names(df1) <- df1[1,]
+df1 <- df1[-1,]
+df1 <- df1[ , c("ID", "Age", "Gender", "BMI", "Syntoms onset", "Hospitalization date",
+                                  "Admission to ICU", "Days in ICU", "Days with ARDS", 
+                                  "CRS Diagnosis", "Days with CRS", "Days with NIV",
+                                  "Days with AMV", "Days of hospitalization", "Death", "Use of NIV",
+                                  "Use of AMV", "ARDS Diagnosis")]
+
+df1 <- df1[!duplicated(df1), ] # Remove full duplicated rows
+
+df2 <- read_excel("covid-data/Table\ 2.xlsx")
+names(df2) <- df2[1,]
+df2 <- df2[-1,]
+colnames(df2)[1] <- "ID"
+
+# Repeat Patients ID in all the rows
+for (i in 1:nrow(df2)) {
+  if (is.na(df2$ID[i])) {
+    df2$ID[i] <- df2$ID[i-1]
+  }
+}
+
+# Replace all NI string values to NA
+df1 <- replace(df1, df1 == "NI", NA)
+df2 <- replace(df2, df2 == "NI", NA)
+
+# Fix some values from table 1 Use of NIV, Use of ARDS
+df1$`Days with NIV`[df1$ID == "COAG-HSJD-057"] <- df1$`Use of NIV`[df1$ID == "COAG-HSJD-057"]
+df1$`Use of NIV`[df1$ID == "COAG-HSJD-057"] <- "Yes"
+df1$`Days with ARDS`[df1$ID == "COAG-HSJD-057"] <- df1$`ARDS Diagnosis`[df1$ID == "COAG-HSJD-057"]
+df1$`ARDS Diagnosis`[df1$ID == "COAG-HSJD-057"] <- "Yes"
+df1$`Days with ARDS`[df1$ID == "COAG-HSJD-102"] <- df1$`ARDS Diagnosis`[df1$ID == "COAG-HSJD-102"]
+df1$`ARDS Diagnosis`[df1$ID == "COAG-HSJD-102"] <- "Yes"
+
+# Merge the two tables by patient ID.
+dfm <- merge(df2, df1, by = "ID")
+
+# set diff
+# setdiff(unique(df2$ID), unique(dfm$ID)) # ID's to check. ID is flipped
+
+# Correct ID name
+df2$ID[df2$ID == "COAG-HSDJ-202"] <- "COAG-HSJD-202"
+df2$ID[df2$ID == "COAG-HSDJ-203"] <- "COAG-HSJD-203"
+df2$ID[df2$ID == "COAG-HSDJ-206"] <- "COAG-HSJD-206"
+
+# Drop the patient with value 3 in Death column
+df1 <- df1[!(df1$Death == '3'),]
+
+# Drop duplicated rows
+df1 <- df1[!duplicated(df1$ID), ]
+
+# Merge again with good ID's
+dfm <- merge(df2, df1, by = "ID")
+
+# setdiff(unique(df1$ID), unique(dfm$ID)) # ID's to check dfm to df1
+# setdiff(unique(df2$ID), unique(dfm$ID)) # ID's to check dfm to df2
+
+# This will tell how many ID are in common in df1 and df2. It's 192, 2 less than the original paper
+patients.id <- unique(dfm$ID) # All the different patients we have
+df1 <- df1[which(patients.id %in% dfm$ID), ] # Delete the rows that have the ID different that the one in the Good_patients vector
+
+
+## NOW WE HAVE ALL THE COMMON PATIENTS IN TABLE 1 AND MERGED TABLE ##
+# Almost all the patients are Clean, we proceed to create the groups
+
+# Create the groups
+df1 <- df1 %>% mutate(Group =
+            case_when(`Use of NIV` == 'No' & `Use of AMV` == 'No' & `ARDS Diagnosis` == 'No' ~ "G1",
+                     (`Use of NIV` == 'Yes' | `Use of NIV` == 'No') & (`Use of AMV` == 'Yes' | `Use of AMV` == 'No') & `ARDS Diagnosis` == 'No' ~ "G2",
+                      `Use of NIV` == 'Yes' & `Use of AMV` == 'No' & `ARDS Diagnosis` == 'Yes' ~ "G3",
+                     (`Use of NIV` == 'Yes' | `Use of NIV` == 'No') & `Use of AMV` == 'Yes' & `ARDS Diagnosis` == 'Yes' ~ "G4")
+)
+
+# Plotting
+par(mfrow=c(2,2))
+
+# Age Histogram
+hist(as.numeric(df1$Age), col = "azure2", ylim=c(0,50),
+           main = paste("Age"), xlab = "Age", ylab = "Frequency (n)")
+
+# Create the table data
+table_data <- matrix(c('Clinical\nclassification','NIV','AMV','ARDS', 
+                       'G1', '-', '-', '-', 
+                       'G2', '-/+', '+/-', '-', 
+                       'G3', '+', '-', '+', 
+                       'G4', '-/+', '+','+'), 
+                     nrow = 5, ncol = 4)
+colnames(table_data) <- c("", "NIV", "AMV", "ARDS")
+
+# Set up the plotting area
+plot(c(0, ncol(table_data)+1), c(0, nrow(table_data)+1), type = "n", xlab = "", ylab = "",
+     xaxt = "n", yaxt = "n")
+
+# Add the table data to the plot
+text(x = rep(1:ncol(table_data), nrow(table_data)),
+     y = rep(nrow(table_data):1, each = ncol(table_data)),
+     labels = as.vector(table_data), cex = 1)
+
+# Group Barplot
+p3 <- barplot(table(df1$Group),col=brewer.pal(n=5,name="Set3"), ylim = c(0,80), 
+        main = "Clinical Classification",
+        xlab = "Clinical Classification",
+        ylab = "Frequency (n)",
+)
+text(x = p3, y = table(df1$Group)+10, label = table(df1$Group))
+
+# Death Barplot
+p4 <- barplot(table(df1$Death),col=brewer.pal(n=5,name="Set3"), ylim = c(0,160), 
+              main = "Vital Status",
+              xlab = "Death",
+              ylab = "Frequency (n)",
+)
+text(x = p4, y = table(df1$Death)+15, label = table(df1$Death))
+
+```
+
+## Reproduce Figure 2 from the publication
+
+but instead of representing the clusters in the annotation, represent
+the groups (G1 to G4)
+
+```{r}
+# Creation of the mean data frame
+dfm[, c(2:28)] <- sapply(dfm[, c(2:28)], as.numeric, na.rm = TRUE)
+df.summarized <- dfm %>% group_by(ID) %>% summarise_if(is.numeric, mean, na.rm = TRUE)
+df.summarized <- df.summarized[ ,names(df.summarized) %in% c("ID","IL-6","CXCL10","IL-38","IL-8","IFN-ɑ","IL-10",
+                                                             "TNF-ɑ","CCL2","CCL3","IFN-γ","IL-1β","G-CSF")]
+
+
+df.summarized <- as.data.frame(df.summarized) # Transform to dataframe
+rownames(df.summarized) <- df.summarized$ID # Rownames as ID
+df.summarized <- df.summarized[, !names(df.summarized) %in% c("ID")] # get rid of the ID column
+
+
+
+df.idgroup <- df1[, names(df1) %in% c("ID", "Group", "Death", "Gender")]
+
+colside.group <- as.numeric(as.factor(df.idgroup$Group))
+colside.group.color <-  brewer.pal(5, "Set1")[colside.group]
+
+
+
+# Basic Heatmap figure
+
+par(mfrow=c(1,1))
+
+pal.col <- brewer_pal(palette = "Oranges")
+heatmap(t(df.summarized), col = pal.col(9), scale = "column", na.rm = TRUE, xlab = "Patients", labCol = FALSE, ColSideColors = colside.group.color)
+legend(inset = c(0, 0), x="bottomleft", legend=c("0.00", "50%", "100%"), fill = pal.col(3), title = "Relative expression", cex = 0.8)
+
+
+
+
+```
+
+## Improve figure 2 of the publication
+
+Add a second annotation with information of deathm and a third one with
+information of gender
+
+```{r}
+# Improvement of the heatmap
+library(ComplexHeatmap)
+
+rownames(df.idgroup) <- df.idgroup$ID
+
+df.summarized$ID <- rownames(df.summarized)
+
+df.summarized.2 <- df.summarized[order(df.idgroup$Group, df.idgroup$Death, df.idgroup$Gender), ]
+
+df.summarized.2 <- df.summarized.2[, !names(df.summarized.2) %in% "ID"]
+
+# rownames(df.summarized.2) <- df.summarized.2$ID
+# df.summarized.2 <- df.summarized.2[, -(1)]
+# df.summarized.2 <- df.summarized.2[, -(13)]
+
+df.normalized <- sapply(df.summarized.2, rescale) # normalize from 0 to 1
+# df.normalized <- as.matrix(df.normalized*100) # From 0% to 100%
+rownames(df.normalized) <- rownames(df.summarized.2) # Write the rownames
+
+# df.normalized.ordered <- merge(df.normalized, df.idgroup)
+
+# ANNOTATIONS
+
+df.idgroup <- df1[, names(df1) %in% c("ID", "Group", "Death", "Gender")]
+df.idgroup <- df.idgroup[order(df.idgroup$Group, df.idgroup$Death, df.idgroup$Gender), ]
+colside.group <- as.numeric(as.factor(df.idgroup$Group))
+# colside.group.color <-  brewer.pal(5, "Set1")[colside.group]
+colside.group.color <- c("G1", "G2", "G3", "G4")[colside.group]
+
+df.idsex <- df1[, names(df1) %in% c("ID", "Gender","Group", "Death")]
+df.idsex <- replace(df.idsex, df.idsex == "72", NA)
+df.idsex <- df.idsex[order(df.idsex$Group, df.idsex$Death, df.idsex$Gender), ]
+colside.gender <- as.numeric(as.factor(df.idsex$Gender))
+# colside.gender.color <-  brewer.pal(5, "Set1")[colside.gender]
+colside.gender.color <- c("F", "M")[colside.gender]
+
+df.iddeath <- df1[, names(df1) %in% c("ID", "Death","Group", "Gender")]
+df.iddeath <- df.iddeath[order(df.iddeath$Group, df.iddeath$Death, df.iddeath$Gender), ]
+colside.death <- as.numeric(as.factor(df.iddeath$Death))
+colside.death.color <- c("No", "Yes")[colside.death]
+
+ha = HeatmapAnnotation(
+  Group = colside.group.color,
+  Death = colside.death.color,
+  Gender = colside.gender.color,
+  col = list(Group = c("G1" = "red", "G2" = "green", "G3" = "blue", "G4" = "yellow"),
+             Death = c("No" = "white", "Yes" = "Black"),
+             Gender = c("F" = "purple", "M" = "orange")
+  )
+)
+
+Heatmap(t(df.normalized), name = "Relative Expression", col = pal.col(9), top_annotation = ha, show_column_names = FALSE, column_title = "Patients", column_title_side = "bottom", cluster_columns = FALSE)
+
+
+```
+
+Now, this heatmap is improved: Data is normalised and scaled Column
+annotations can easily lead to conclusions: G1 patients are mostly
+alive, as G3 G4 patients are mostly dead G2 M patients have more death
+than G2 F patients
+
+# session info {.unnumbered}
+
+```{r, results='asis',  echo=FALSE, message=FALSE }
+sessionInfo()
+```
